@@ -2,24 +2,23 @@ import { useState, useMemo, useCallback } from 'react';
 import { Header } from './components/layout/Header';
 import { FamilyGraph } from './components/graph/FamilyGraph';
 import { RelationshipSelector } from './components/controls/RelationshipSelector';
-import { ConsanguinityPanel } from './components/controls/ConsanguinityPanel';
+import { CompoundConsanguinityPanel, type ConsanguinityFactor } from './components/controls/CompoundConsanguinityPanel';
 import { SexSelector } from './components/controls/SexSelector';
 import { ProbabilityDisplay } from './components/results/ProbabilityDisplay';
 import {
   getPedigreeForRelationship,
-  getSelectedPairIds,
-  CONSANGUINITY_SCENARIOS
+  getSelectedPairIds
 } from './lib/pedigree-templates';
 import {
   calculateProbabilities,
-  getConsanguinityFactor
+  getCompoundConsanguinityFactor
 } from './lib/genetics';
 import type { RelationshipType, Sex, FamilyGraph as FamilyGraphType } from './types';
 import './App.css';
 
 function App() {
   const [relationship, setRelationship] = useState<RelationshipType>('siblings');
-  const [consanguinityId, setConsanguinityId] = useState('none');
+  const [consanguinityFactors, setConsanguinityFactors] = useState<ConsanguinityFactor[]>([]);
   const [person1Sex, setPerson1Sex] = useState<Sex>('M');
   const [person2Sex, setPerson2Sex] = useState<Sex>('F');
 
@@ -28,7 +27,7 @@ function App() {
     return getPedigreeForRelationship(relationship);
   }, [relationship]);
 
-  // Update graph with current sex selections
+  // Update graph with current sex selections and consanguinity links
   const graph = useMemo((): FamilyGraphType => {
     const [id1, id2] = getSelectedPairIds(relationship);
     const persons = new Map(baseGraph.persons);
@@ -39,26 +38,38 @@ function App() {
     if (p1) persons.set(id1, { ...p1, sex: person1Sex });
     if (p2) persons.set(id2, { ...p2, sex: person2Sex });
 
-    // Add consanguinity link if applicable
-    const scenario = CONSANGUINITY_SCENARIOS.find(s => s.id === consanguinityId);
-    const consanguinityLinks = [];
-
-    if (scenario && scenario.id !== 'none') {
-      if (scenario.ancestorGeneration === 'parents') {
-        consanguinityLinks.push({
+    // Add consanguinity links for visualization
+    const consanguinityLinks = consanguinityFactors.map((factor, index) => {
+      // For parent-level consanguinity, show link between father and mother
+      if (factor.generation === 'parents') {
+        return {
           person1Id: 'father',
           person2Id: 'mother',
-          relationship: scenario.ancestorRelationship,
-        });
+          relationship: factor.relationship,
+        };
       }
-    }
+      // For grandparent level, show between grandparents
+      if (factor.generation === 'grandparents') {
+        return {
+          person1Id: index % 2 === 0 ? 'gf1' : 'gf2',
+          person2Id: index % 2 === 0 ? 'gm1' : 'gm2',
+          relationship: factor.relationship,
+        };
+      }
+      // Default
+      return {
+        person1Id: 'father',
+        person2Id: 'mother',
+        relationship: factor.relationship,
+      };
+    });
 
     return {
       ...baseGraph,
       persons,
       consanguinityLinks,
     };
-  }, [baseGraph, relationship, person1Sex, person2Sex, consanguinityId]);
+  }, [baseGraph, relationship, person1Sex, person2Sex, consanguinityFactors]);
 
   // Get selected pair IDs
   const selectedPair = useMemo(() => {
@@ -86,13 +97,11 @@ function App() {
       return null;
     }
 
-    const scenario = CONSANGUINITY_SCENARIOS.find(s => s.id === consanguinityId);
-    const consanguinityFactor = scenario && scenario.id !== 'none'
-      ? getConsanguinityFactor(scenario.ancestorRelationship)
-      : 0;
+    // Calculate compound consanguinity factor from all factors
+    const compoundFactor = getCompoundConsanguinityFactor(consanguinityFactors);
 
-    return calculateProbabilities(p1, p2, relationship, consanguinityFactor);
-  }, [graph, selectedPair, relationship, consanguinityId]);
+    return calculateProbabilities(p1, p2, relationship, compoundFactor);
+  }, [graph, selectedPair, relationship, consanguinityFactors]);
 
   // Handle sex toggle from graph click
   const handlePersonSexToggle = useCallback((personId: string) => {
@@ -141,9 +150,9 @@ function App() {
             </div>
 
             <div className="sidebar-section">
-              <ConsanguinityPanel
-                selectedScenarioId={consanguinityId}
-                onChange={setConsanguinityId}
+              <CompoundConsanguinityPanel
+                factors={consanguinityFactors}
+                onChange={setConsanguinityFactors}
               />
             </div>
 

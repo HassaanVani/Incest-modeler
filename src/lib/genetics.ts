@@ -235,6 +235,37 @@ export function getConsanguinityFactor(parentRelationship: RelationshipType | nu
 }
 
 /**
+ * Generation depth multipliers for consanguinity effects
+ * Grandparent consanguinity has less effect than parent consanguinity
+ */
+const GENERATION_MULTIPLIERS: Record<string, number> = {
+    'parents': 1.0,
+    'grandparents': 0.5,
+    'great-grandparents': 0.25,
+};
+
+/**
+ * Calculate compound consanguinity factor from multiple ancestry relationships
+ * Each factor contributes additively, with generation depth reducing the effect
+ */
+export function getCompoundConsanguinityFactor(
+    factors: Array<{
+        generation: 'parents' | 'grandparents' | 'great-grandparents';
+        relationship: RelationshipType;
+    }>
+): number {
+    let totalFactor = 0;
+
+    for (const factor of factors) {
+        const baseF = getConsanguinityFactor(factor.relationship);
+        const multiplier = GENERATION_MULTIPLIERS[factor.generation] || 1.0;
+        totalFactor += baseF * multiplier;
+    }
+
+    return totalFactor;
+}
+
+/**
  * Find all paths between two individuals through common ancestors
  */
 export function findAncestorPaths(
