@@ -1,0 +1,51 @@
+.relationship-selector {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.relationship-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-xs);
+}
+
+.relationship-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    text-align: left;
+}
+
+.relationship-option:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+
+.relationship-option.selected {
+    background-color: var(--accent-muted);
+    border-color: var(--accent-primary);
+}
+
+.relationship-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.relationship-option.selected .relationship-label {
+    color: var(--accent-secondary);
+}
+
+.relationship-coefficient {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}

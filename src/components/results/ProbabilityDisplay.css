@@ -1,0 +1,135 @@
+.probability-display {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.probability-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.probability-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.probability-pair {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.probability-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.probability-value {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--accent-secondary);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.probability-bar {
+    position: relative;
+    height: 8px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: visible;
+}
+
+.probability-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: var(--radius-full);
+    transition: width var(--transition-slow);
+}
+
+.probability-bar-baseline {
+    position: absolute;
+    top: -4px;
+    width: 2px;
+    height: 16px;
+    background-color: var(--text-muted);
+    border-radius: 1px;
+    transform: translateX(-50%);
+}
+
+.probability-change {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 12px;
+    color: var(--warning);
+}
+
+.probability-change-icon {
+    font-size: 14px;
+}
+
+.probability-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border);
+}
+
+.probability-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) 0;
+}
+
+.probability-detail-row.baseline {
+    opacity: 0.6;
+    padding-top: var(--space-md);
+    border-top: 1px dashed var(--border);
+    margin-top: var(--space-xs);
+}
+
+.probability-detail-row.sex-linked .probability-detail-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.sex-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+}
+
+.sex-indicator.x {
+    background-color: rgba(236, 72, 153, 0.2);
+    color: var(--node-female);
+}
+
+.sex-indicator.y {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: var(--node-male);
+}
+
+.probability-detail-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.probability-detail-value {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}

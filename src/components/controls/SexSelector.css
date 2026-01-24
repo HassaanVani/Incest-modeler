@@ -1,0 +1,73 @@
+.sex-selector {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sex-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.sex-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sex-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.sex-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.sex-toggle {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.sex-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    color: var(--text-muted);
+}
+
+.sex-btn:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+
+.sex-btn.selected {
+    border-width: 2px;
+}
+
+.sex-btn.selected.male {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-color: var(--node-male);
+    color: var(--node-male);
+}
+
+.sex-btn.selected.female {
+    background-color: rgba(236, 72, 153, 0.2);
+    border-color: var(--node-female);
+    color: var(--node-female);
+}
