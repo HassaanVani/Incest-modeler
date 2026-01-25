@@ -1,117 +1,120 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Header } from './components/layout/Header';
-import { FamilyGraph } from './components/graph/FamilyGraph';
+import { InteractiveGraph } from './components/graph/InteractiveGraph';
 import { RelationshipSelector } from './components/controls/RelationshipSelector';
-import { CompoundConsanguinityPanel, type ConsanguinityFactor } from './components/controls/CompoundConsanguinityPanel';
 import { SexSelector } from './components/controls/SexSelector';
 import { ProbabilityDisplay } from './components/results/ProbabilityDisplay';
 import {
-  getPedigreeForRelationship,
-  getSelectedPairIds
-} from './lib/pedigree-templates';
-import {
-  calculateProbabilities,
-  getCompoundConsanguinityFactor
-} from './lib/genetics';
-import type { RelationshipType, Sex, FamilyGraph as FamilyGraphType } from './types';
+  generateBasePedigree,
+  calculateFromPedigree,
+  type DynamicPedigree,
+} from './lib/dynamic-pedigree';
+import { BASE_COEFFICIENTS, xLinkedCoefficient, yLinkedCoefficient } from './lib/genetics';
+import type { RelationshipType, Sex } from './types';
 import './App.css';
 
 function App() {
-  const [relationship, setRelationship] = useState<RelationshipType>('siblings');
-  const [consanguinityFactors, setConsanguinityFactors] = useState<ConsanguinityFactor[]>([]);
+  const [baseRelationship, setBaseRelationship] = useState<RelationshipType>('first-cousins');
   const [person1Sex, setPerson1Sex] = useState<Sex>('M');
   const [person2Sex, setPerson2Sex] = useState<Sex>('F');
 
-  // Get the pedigree graph for the selected relationship
-  const baseGraph = useMemo(() => {
-    return getPedigreeForRelationship(relationship);
-  }, [relationship]);
+  // Initialize pedigree from base relationship
+  const [pedigree, setPedigree] = useState<DynamicPedigree>(() =>
+    generateBasePedigree(baseRelationship, person1Sex, person2Sex)
+  );
 
-  // Update graph with current sex selections and consanguinity links
-  const graph = useMemo((): FamilyGraphType => {
-    const [id1, id2] = getSelectedPairIds(relationship);
-    const persons = new Map(baseGraph.persons);
+  // Regenerate pedigree when base relationship changes
+  const handleRelationshipChange = useCallback((newRelationship: RelationshipType) => {
+    setBaseRelationship(newRelationship);
+    setPedigree(generateBasePedigree(newRelationship, person1Sex, person2Sex));
+  }, [person1Sex, person2Sex]);
 
-    // Update sexes for selected persons
-    const p1 = persons.get(id1);
-    const p2 = persons.get(id2);
-    if (p1) persons.set(id1, { ...p1, sex: person1Sex });
-    if (p2) persons.set(id2, { ...p2, sex: person2Sex });
-
-    // Add consanguinity links for visualization
-    const consanguinityLinks = consanguinityFactors.map((factor, index) => {
-      // For parent-level consanguinity, show link between father and mother
-      if (factor.generation === 'parents') {
-        return {
-          person1Id: 'father',
-          person2Id: 'mother',
-          relationship: factor.relationship,
-        };
+  // Handle sex changes
+  const handlePerson1SexChange = useCallback((sex: Sex) => {
+    setPerson1Sex(sex);
+    // Update the target person's sex in the pedigree
+    setPedigree(prev => {
+      const newPersons = new Map(prev.persons);
+      const p1 = newPersons.get(prev.targetPair[0]);
+      if (p1) {
+        newPersons.set(prev.targetPair[0], { ...p1, sex });
       }
-      // For grandparent level, show between grandparents
-      if (factor.generation === 'grandparents') {
-        return {
-          person1Id: index % 2 === 0 ? 'gf1' : 'gf2',
-          person2Id: index % 2 === 0 ? 'gm1' : 'gm2',
-          relationship: factor.relationship,
-        };
-      }
-      // Default
-      return {
-        person1Id: 'father',
-        person2Id: 'mother',
-        relationship: factor.relationship,
-      };
+      return { ...prev, persons: newPersons };
     });
+  }, []);
+
+  const handlePerson2SexChange = useCallback((sex: Sex) => {
+    setPerson2Sex(sex);
+    setPedigree(prev => {
+      const newPersons = new Map(prev.persons);
+      const p2 = newPersons.get(prev.targetPair[1]);
+      if (p2) {
+        newPersons.set(prev.targetPair[1], { ...p2, sex });
+      }
+      return { ...prev, persons: newPersons };
+    });
+  }, []);
+
+  // Toggle sex from graph click
+  const handlePersonSexToggle = useCallback((personId: string) => {
+    setPedigree(prev => {
+      const newPersons = new Map(prev.persons);
+      const person = newPersons.get(personId);
+      if (person) {
+        const newSex = person.sex === 'M' ? 'F' : 'M';
+        newPersons.set(personId, { ...person, sex: newSex });
+
+        // Update tracked sex if it's a target
+        if (personId === prev.targetPair[0]) {
+          setPerson1Sex(newSex);
+        } else if (personId === prev.targetPair[1]) {
+          setPerson2Sex(newSex);
+        }
+      }
+      return { ...prev, persons: newPersons };
+    });
+  }, []);
+
+  // Calculate probabilities from the dynamic pedigree
+  const probabilityResult = useMemo(() => {
+    const result = calculateFromPedigree(pedigree);
+    const baseR = BASE_COEFFICIENTS[baseRelationship] || 0.125;
+
+    const p1 = pedigree.persons.get(pedigree.targetPair[0]);
+    const p2 = pedigree.persons.get(pedigree.targetPair[1]);
+
+    // Calculate sex-linked coefficients
+    let xLinked: number | null = null;
+    let yLinked: number | null = null;
+
+    if (p1 && p2) {
+      xLinked = xLinkedCoefficient(p1, p2, baseRelationship);
+      yLinked = yLinkedCoefficient(p1, p2, baseRelationship);
+    }
 
     return {
-      ...baseGraph,
-      persons,
-      consanguinityLinks,
+      coefficientOfRelationship: result.coefficientOfRelationship,
+      geneOverlapProbability: result.coefficientOfRelationship,
+      inbreedingCoefficient: result.inbreedingCoefficient,
+      xLinkedCoefficient: xLinked,
+      yLinkedCoefficient: yLinked,
+      baselineR: baseR,
+      deltaFromBaseline: result.coefficientOfRelationship - baseR,
     };
-  }, [baseGraph, relationship, person1Sex, person2Sex, consanguinityFactors]);
+  }, [pedigree, baseRelationship]);
 
-  // Get selected pair IDs
-  const selectedPair = useMemo(() => {
-    return getSelectedPairIds(relationship);
-  }, [relationship]);
-
-  // Get person labels
+  // Get labels for targets
   const personLabels = useMemo(() => {
-    const [id1, id2] = selectedPair;
-    const p1 = graph.persons.get(id1);
-    const p2 = graph.persons.get(id2);
+    const p1 = pedigree.persons.get(pedigree.targetPair[0]);
+    const p2 = pedigree.persons.get(pedigree.targetPair[1]);
     return {
       person1: p1?.label || 'Person A',
       person2: p2?.label || 'Person B',
     };
-  }, [graph, selectedPair]);
+  }, [pedigree]);
 
-  // Calculate probability result
-  const probabilityResult = useMemo(() => {
-    const [id1, id2] = selectedPair;
-    const p1 = graph.persons.get(id1);
-    const p2 = graph.persons.get(id2);
-
-    if (!p1 || !p2) {
-      return null;
-    }
-
-    // Calculate compound consanguinity factor from all factors
-    const compoundFactor = getCompoundConsanguinityFactor(consanguinityFactors);
-
-    return calculateProbabilities(p1, p2, relationship, compoundFactor);
-  }, [graph, selectedPair, relationship, consanguinityFactors]);
-
-  // Handle sex toggle from graph click
-  const handlePersonSexToggle = useCallback((personId: string) => {
-    const [id1, id2] = selectedPair;
-    if (personId === id1) {
-      setPerson1Sex(s => s === 'M' ? 'F' : 'M');
-    } else if (personId === id2) {
-      setPerson2Sex(s => s === 'M' ? 'F' : 'M');
-    }
-  }, [selectedPair]);
+  // Count defined relationships
+  const definedRelationshipsCount = pedigree.definedRelationships.length;
 
   return (
     <div className="app">
@@ -121,20 +124,29 @@ function App() {
         <div className="app-layout">
           <section className="app-graph-section">
             <div className="section-header">
-              <h2 className="section-title">Family Pedigree</h2>
+              <h2 className="section-title">Interactive Pedigree</h2>
+              {definedRelationshipsCount > 0 && (
+                <span className="defined-count">
+                  {definedRelationshipsCount} relationship{definedRelationshipsCount > 1 ? 's' : ''} defined
+                </span>
+              )}
             </div>
-            <FamilyGraph
-              graph={graph}
-              selectedPair={selectedPair}
+            <InteractiveGraph
+              pedigree={pedigree}
+              onPedigreeChange={setPedigree}
               onPersonSexToggle={handlePersonSexToggle}
             />
           </section>
 
           <aside className="app-sidebar">
             <div className="sidebar-section">
+              <label className="label">Base Relationship</label>
+              <p className="section-description">
+                Select the relationship type to model, then click pairs of nodes to define additional relationships
+              </p>
               <RelationshipSelector
-                value={relationship}
-                onChange={setRelationship}
+                value={baseRelationship}
+                onChange={handleRelationshipChange}
               />
             </div>
 
@@ -144,26 +156,40 @@ function App() {
                 person2Sex={person2Sex}
                 person1Label={personLabels.person1}
                 person2Label={personLabels.person2}
-                onPerson1SexChange={setPerson1Sex}
-                onPerson2SexChange={setPerson2Sex}
+                onPerson1SexChange={handlePerson1SexChange}
+                onPerson2SexChange={handlePerson2SexChange}
               />
             </div>
 
-            <div className="sidebar-section">
-              <CompoundConsanguinityPanel
-                factors={consanguinityFactors}
-                onChange={setConsanguinityFactors}
-              />
-            </div>
+            {/* Defined relationships summary */}
+            {pedigree.definedRelationships.length > 0 && (
+              <div className="sidebar-section">
+                <label className="label">Defined Relationships</label>
+                <div className="defined-relationships-list">
+                  {pedigree.definedRelationships.map((rel, index) => (
+                    <div key={index} className="defined-relationship-item">
+                      <span className="defined-relationship-pair">
+                        {pedigree.persons.get(rel.person1Id)?.label} ↔ {pedigree.persons.get(rel.person2Id)?.label}
+                      </span>
+                      <span className="defined-relationship-type">{rel.type}</span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-secondary reset-btn"
+                  onClick={() => setPedigree(generateBasePedigree(baseRelationship, person1Sex, person2Sex))}
+                >
+                  Reset Relationships
+                </button>
+              </div>
+            )}
 
             <div className="sidebar-section results-section">
-              {probabilityResult && (
-                <ProbabilityDisplay
-                  result={probabilityResult}
-                  person1Label={personLabels.person1}
-                  person2Label={personLabels.person2}
-                />
-              )}
+              <ProbabilityDisplay
+                result={probabilityResult}
+                person1Label={personLabels.person1}
+                person2Label={personLabels.person2}
+              />
             </div>
           </aside>
         </div>
