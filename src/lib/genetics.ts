@@ -273,57 +273,67 @@ export function findAncestorPaths(
     person2Id: string,
     graph: FamilyGraph
 ): AncestorPath[] {
-    const paths: AncestorPath[] = [];
+    const pathsA = getAncestorPaths(person1Id, graph);
+    const pathsB = getAncestorPaths(person2Id, graph);
+    
+    const validFullPaths: AncestorPath[] = [];
+    const seenPathKeys = new Set<string>();
 
-    // Get all ancestors of person1
-    const ancestors1 = getAllAncestors(person1Id, graph);
-
-    // Get all ancestors of person2
-    const ancestors2 = getAllAncestors(person2Id, graph);
-
-    // Find common ancestors
-    for (const [ancestorId, path1] of ancestors1) {
-        if (ancestors2.has(ancestorId)) {
-            const path2 = ancestors2.get(ancestorId)!;
-            paths.push({
-                personIds: [...path1, ancestorId, ...path2.reverse()],
-                commonAncestorId: ancestorId,
-                steps: path1.length + path2.length,
-            });
+    for (const pathA of pathsA) {
+        for (const pathB of pathsB) {
+            const ancestorA = pathA[pathA.length - 1];
+            const ancestorB = pathB[pathB.length - 1];
+            
+            if (ancestorA === ancestorB) {
+                const setB = new Set(pathB);
+                let intersectionCount = 0;
+                for (const node of pathA) {
+                    if (setB.has(node)) intersectionCount++;
+                }
+                
+                if (intersectionCount === 1) {
+                    const commonAncestorId = ancestorA;
+                    const fullPath = [...pathA, ...pathB.slice(0, -1).reverse()];
+                    const key = fullPath.join(',');
+                    if (!seenPathKeys.has(key)) {
+                        seenPathKeys.add(key);
+                        validFullPaths.push({ 
+                            personIds: fullPath, 
+                            commonAncestorId, 
+                            steps: pathA.length - 1 + pathB.length - 1 
+                        });
+                    }
+                }
+            }
         }
     }
-
-    return paths;
+    
+    return validFullPaths;
 }
 
 /**
- * Get all ancestors of a person with path lengths
+ * Get all paths to all ancestors for a given person
  */
-function getAllAncestors(
+function getAncestorPaths(
     personId: string,
-    graph: FamilyGraph,
-    visited: Set<string> = new Set()
-): Map<string, string[]> {
-    const ancestors = new Map<string, string[]>();
-
-    if (visited.has(personId)) return ancestors;
-    visited.add(personId);
-
-    const person = graph.persons.get(personId);
-    if (!person) return ancestors;
-
-    // Add direct parents
-    const parentIds = [person.motherId, person.fatherId].filter(Boolean) as string[];
-
-    for (const parentId of parentIds) {
-        ancestors.set(parentId, [personId]);
-
-        // Recursively get grandparents
-        const grandAncestors = getAllAncestors(parentId, graph, visited);
-        for (const [grandId, path] of grandAncestors) {
-            ancestors.set(grandId, [personId, ...path]);
+    graph: FamilyGraph
+): string[][] {
+    const paths: string[][] = [];
+    
+    function dfs(currentId: string, currentPath: string[]) {
+        paths.push([...currentPath]);
+        
+        const person = graph.persons.get(currentId);
+        if (!person) return;
+        
+        const parentIds = [person.motherId, person.fatherId].filter(Boolean) as string[];
+        for (const parentId of parentIds) {
+            if (!currentPath.includes(parentId)) {
+                dfs(parentId, [...currentPath, parentId]);
+            }
         }
     }
-
-    return ancestors;
+    
+    dfs(personId, [personId]);
+    return paths;
 }

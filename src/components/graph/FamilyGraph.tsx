@@ -213,6 +213,7 @@ export function FamilyGraph({
         const handleResize = () => draw();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graph, selectedPair, highlightedPath]);
 
     return (

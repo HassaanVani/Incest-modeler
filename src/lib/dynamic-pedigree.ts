@@ -45,7 +45,7 @@ export function generateBasePedigree(
         edges.push({ parentId, childId });
     };
 
-    let targetPair: [string, string] = ['p1', 'p2'];
+    const targetPair: [string, string] = ['p1', 'p2'];
 
     switch (baseRelationship) {
         case 'siblings':
@@ -189,6 +189,8 @@ export function generateBasePedigree(
     };
 }
 
+type InbreedingCache = Map<string, number>;
+
 /**
  * Calculate inbreeding coefficient from the dynamic pedigree
  * Uses path-counting through the actual graph structure
@@ -199,84 +201,114 @@ export function calculateFromPedigree(pedigree: DynamicPedigree): {
     contributingPaths: string[][];
 } {
     const [id1, id2] = pedigree.targetPair;
+    const cache: InbreedingCache = new Map();
 
-    // Find all paths from id1 to id2 through common ancestors
-    const paths = findAllPaths(id1, id2, pedigree);
-
-    let r = 0;
-    for (const path of paths) {
-        // r = sum of (0.5)^n for each path through a common ancestor
-        // n = number of steps in the path
-        const contribution = Math.pow(0.5, path.length - 1);
-        r += contribution;
-    }
+    const result = calculateRAndPaths(resolveId(id1, pedigree.merges), resolveId(id2, pedigree.merges), pedigree, cache);
 
     return {
-        coefficientOfRelationship: Math.min(r, 1), // Cap at 1
-        inbreedingCoefficient: r / 2,
-        contributingPaths: paths,
+        coefficientOfRelationship: Math.min(result.r, 1), // Cap at 1
+        inbreedingCoefficient: result.r / 2,
+        contributingPaths: result.paths,
     };
 }
 
-/**
- * Find all paths between two individuals through common ancestors
- */
-function findAllPaths(id1: string, id2: string, pedigree: DynamicPedigree): string[][] {
-    // Build adjacency for going upward (child -> parents)
+function calculateRAndPaths(id1: string, id2: string, pedigree: DynamicPedigree, cache: InbreedingCache): { r: number, paths: string[][] } {
+    const validPaths = findAllPaths(id1, id2, pedigree);
+    
+    let r = 0;
+    const contributingPaths: string[][] = [];
+
+    for (const p of validPaths) {
+        const n = p.path.length - 1; // number of steps (edges)
+        const FA = getInbreeding(p.commonAncestor, pedigree, cache);
+        r += Math.pow(0.5, n) * (1 + FA);
+        contributingPaths.push(p.path);
+    }
+
+    return { r, paths: contributingPaths };
+}
+
+function getInbreeding(id: string, pedigree: DynamicPedigree, cache: InbreedingCache): number {
+    if (cache.has(id)) return cache.get(id)!;
+
+    // Find parents
+    const parents = pedigree.edges
+        .filter(e => resolveId(e.childId, pedigree.merges) === id)
+        .map(e => resolveId(e.parentId, pedigree.merges));
+        
+    const uniqueParents = Array.from(new Set(parents));
+    if (uniqueParents.length < 2) {
+        cache.set(id, 0);
+        return 0;
+    }
+    
+    const [p1, p2] = uniqueParents;
+    const { r } = calculateRAndPaths(p1, p2, pedigree, cache);
+    const F = r / 2;
+    cache.set(id, F);
+    return F;
+}
+
+function getAncestorPaths(startId: string, pedigree: DynamicPedigree): string[][] {
     const parentOf = new Map<string, string[]>();
-
     for (const edge of pedigree.edges) {
-        const resolved = resolveId(edge.childId, pedigree.merges);
-        if (!parentOf.has(resolved)) {
-            parentOf.set(resolved, []);
-        }
-        parentOf.get(resolved)!.push(resolveId(edge.parentId, pedigree.merges));
-    }
-
-    // DFS to find all ancestors of each person
-    const getAncestors = (id: string): Map<string, number> => {
-        const ancestors = new Map<string, number>();
-        const visited = new Set<string>();
-
-        const dfs = (current: string, depth: number) => {
-            if (visited.has(current)) return;
-            visited.add(current);
-
-            const parents = parentOf.get(current) || [];
-            for (const parent of parents) {
-                if (!ancestors.has(parent) || ancestors.get(parent)! > depth + 1) {
-                    ancestors.set(parent, depth + 1);
-                }
-                dfs(parent, depth + 1);
-            }
-        };
-
-        dfs(resolveId(id, pedigree.merges), 0);
-        return ancestors;
-    };
-
-    const ancestors1 = getAncestors(id1);
-    const ancestors2 = getAncestors(id2);
-
-    // Find common ancestors
-    const commonAncestors: string[] = [];
-    for (const [ancestorId] of ancestors1) {
-        if (ancestors2.has(ancestorId)) {
-            commonAncestors.push(ancestorId);
+        const child = resolveId(edge.childId, pedigree.merges);
+        const parent = resolveId(edge.parentId, pedigree.merges);
+        if (!parentOf.has(child)) parentOf.set(child, []);
+        if (!parentOf.get(child)!.includes(parent)) {
+            parentOf.get(child)!.push(parent);
         }
     }
-
-    // For each common ancestor, create path
+    
     const paths: string[][] = [];
-    for (const ancestor of commonAncestors) {
-        const depth1 = ancestors1.get(ancestor)!;
-        const depth2 = ancestors2.get(ancestor)!;
-        // Simple path representation: just track the length
-        const pathLength = depth1 + depth2 + 1;
-        paths.push(new Array(pathLength).fill(ancestor));
+    
+    function dfs(currentId: string, currentPath: string[]) {
+        paths.push([...currentPath]);
+        const parents = parentOf.get(currentId) || [];
+        for (const parent of parents) {
+            if (!currentPath.includes(parent)) {
+                dfs(parent, [...currentPath, parent]);
+            }
+        }
     }
-
+    
+    dfs(startId, [startId]);
     return paths;
+}
+
+function findAllPaths(id1: string, id2: string, pedigree: DynamicPedigree): { path: string[], commonAncestor: string }[] {
+    const pathsA = getAncestorPaths(id1, pedigree);
+    const pathsB = getAncestorPaths(id2, pedigree);
+    
+    const validFullPaths: { path: string[], commonAncestor: string }[] = [];
+    const seenPathKeys = new Set<string>();
+
+    for (const pathA of pathsA) {
+        for (const pathB of pathsB) {
+            const ancestorA = pathA[pathA.length - 1];
+            const ancestorB = pathB[pathB.length - 1];
+            
+            if (ancestorA === ancestorB) {
+                const setB = new Set(pathB);
+                let intersectionCount = 0;
+                for (const node of pathA) {
+                    if (setB.has(node)) intersectionCount++;
+                }
+                
+                if (intersectionCount === 1) {
+                    const commonAncestor = ancestorA;
+                    const fullPath = [...pathA, ...pathB.slice(0, -1).reverse()];
+                    const key = fullPath.join(',');
+                    if (!seenPathKeys.has(key)) {
+                        seenPathKeys.add(key);
+                        validFullPaths.push({ path: fullPath, commonAncestor });
+                    }
+                }
+            }
+        }
+    }
+    
+    return validFullPaths;
 }
 
 /**
